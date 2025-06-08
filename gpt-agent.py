@@ -192,6 +192,139 @@ class ChatAgent:
         
         except Exception as e:
             return f"Error: {e}"
+    
+    def analyze_time_sensitive_conversation(self, conversation_array: List[Dict]) -> Dict[str, str]:
+        """
+        Analyze a multi-turn conversation for time-sensitive content and determine delay
+        
+        Args:
+            conversation_array (List[Dict]): Array of conversation dictionaries
+            
+        Returns:
+            Dict[str, str]: Dictionary with delay information {"delay": "..."}
+        """
+        import json
+        
+        try:
+            # Stringify the JSON array
+            conversation_json = json.dumps(conversation_array, indent=2)
+            
+            # Create the prompt with the conversation data
+            prompt = f"""Expected LLM Behaviour:
+Go through multi-turn conversation and determine if its time-sensitive and respond back with worst time possible. if it's timesensitive give back worst time.
+
+LLM should comeup with just time the worst time that LLM responds to cancel the plan.
+
+Output should be `{{"delay": ""}}`.
+
+If its greeting or casual message until you see plan, just respond back appropriately. If you see plan respond with worst time in the json otherwise delay should be 0.
+
+If its plan to start something, just return 0. once the plan is ON then delay the response when terms like ETA or timesensitive messages comes.
+
+for instance, 
+If its movie plan, return delay 2 hours
+If its dinner plan, return delay 1 hour
+If its lunch plan, return delay 30 mins
+If its breakfast plan, return delay 15 mins
+If its brunch plan, return delay 1 hour
+If its lunch plan, return delay 30 mins
+If its breakfast plan, return delay 15 mins
+If its brunch plan, return delay 1 hour
+If its death message, return delay 1 month
+
+For the below multi-turn conversation:
+
+\"\"\"
+{conversation_json}
+\"\"\"
+"""
+            
+            # Make API call to analyze the conversation
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "You are an expert at analyzing conversations for time-sensitive content. Always respond with valid JSON format."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=150,
+                temperature=0.3  # Lower temperature for more consistent JSON output
+            )
+            
+            # Get the response content
+            response_content = response.choices[0].message.content.strip()
+            
+            # Extract JSON from response
+            try:
+                # Try to find JSON in the response
+                import re
+                json_match = re.search(r'\{.*?"delay".*?\}', response_content, re.DOTALL)
+                
+                if json_match:
+                    json_str = json_match.group()
+                    delay_data = json.loads(json_str)
+                    return delay_data
+                else:
+                    # If no JSON found, try to parse the entire response
+                    delay_data = json.loads(response_content)
+                    return delay_data
+                    
+            except json.JSONDecodeError:
+                # If JSON parsing fails, extract delay value manually
+                delay_value = "0"
+                if "delay" in response_content.lower():
+                    # Try to extract delay value from text
+                    delay_match = re.search(r'"delay":\s*"([^"]*)"', response_content)
+                    if delay_match:
+                        delay_value = delay_match.group(1)
+                
+                return {"delay": delay_value}
+                
+        except Exception as e:
+            print(f"❌ Error analyzing conversation: {e}")
+            return {"delay": "0"}
+    
+    def test_time_sensitive_analysis(self):
+        """
+        Test function to demonstrate time-sensitive conversation analysis
+        """
+        import json
+        
+        # Example conversation arrays for testing
+        test_conversations = [
+            # Test 1: Casual greeting
+            [
+                {"role": "user", "content": "Hello there!"},
+                {"role": "assistant", "content": "Hi! How can I help you today?"},
+                {"role": "user", "content": "Just saying hi, have a great day!"}
+            ],
+            
+            # Test 2: Planning something
+            [
+                {"role": "user", "content": "Hey, want to meet for lunch?"},
+                {"role": "assistant", "content": "Sure! What time works for you?"},
+                {"role": "user", "content": "How about 12:30 PM at the cafe?"},
+                {"role": "assistant", "content": "Perfect, see you at 12:30!"},
+                {"role": "user", "content": "What's your ETA? I'm already here"}
+            ],
+            
+            # Test 3: Time-sensitive request
+            [
+                {"role": "user", "content": "Emergency! Can you help me right now?"},
+                {"role": "assistant", "content": "Of course! What do you need?"},
+                {"role": "user", "content": "I need this done in 10 minutes, it's urgent!"}
+            ]
+        ]
+        
+        print("🧪 Testing Time-Sensitive Conversation Analysis")
+        print("=" * 60)
+        
+        for i, conversation in enumerate(test_conversations, 1):
+            print(f"\n📝 Test Case {i}:")
+            print("Conversation:", json.dumps(conversation, indent=2))
+            
+            result = self.analyze_time_sensitive_conversation(conversation)
+            print(f"🎯 Analysis Result: {result}")
+            print("-" * 40)
 
 if __name__ == "__main__":
     # Create a ChatAgent instance
@@ -219,6 +352,12 @@ if __name__ == "__main__":
     results = agent.process_conversation_list(example_conversations)
     
     print(f"\n✅ Processed {len(results)} conversations successfully!")
+    
+    print("\n" + "=" * 60)
+    
+    # Test time-sensitive conversation analysis
+    print("🧪 Testing Time-Sensitive Analysis Feature...")
+    agent.test_time_sensitive_analysis()
     
     print("\n" + "=" * 60)
     
