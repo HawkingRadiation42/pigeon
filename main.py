@@ -91,7 +91,7 @@ async def send_delayed_message(to_number: str, from_number: str, original_messag
         # Also send message to WhatsApp number
         try:
             whatsapp_message = client.messages.create(
-                body=f"Delayed message from {to_number}: {original_message}\nGrok Response: {grok_response}",
+                body=f"{grok_response}",
                 from_=from_number,  # Your Twilio number
                 to="whatsapp:+917355620545"
             )
