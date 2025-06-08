@@ -3,6 +3,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 import logging
+import asyncio
 from rabbitmq_service import rabbitmq_service
 from mongodb_service import mongodb_service
 from message_processor import process_message_if_queue_empty
@@ -33,19 +34,33 @@ class HealthResponse(BaseModel):
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize RabbitMQ and MongoDB connections on startup."""
+    """Initialize RabbitMQ and MongoDB connections on startup and clear existing data."""
     logger.info("Starting up Pigeon API...")
     
     # Initialize RabbitMQ
     if rabbitmq_service.connect():
         rabbitmq_service.declare_queue(SMS_QUEUE_NAME)
         logger.info("RabbitMQ connection established and SMS queue declared")
+        
+        # Clear the queue on startup
+        try:
+            rabbitmq_service.purge_queue(SMS_QUEUE_NAME)
+            logger.info(f"Queue '{SMS_QUEUE_NAME}' cleared on startup")
+        except Exception as e:
+            logger.warning(f"Failed to clear queue on startup: {e}")
     else:
         logger.warning("Failed to connect to RabbitMQ on startup")
     
     # Initialize MongoDB
     if mongodb_service.connect():
         logger.info("MongoDB connection established")
+        
+        # Clear the database on startup
+        try:
+            mongodb_service.clear_all_messages()
+            logger.info("MongoDB database cleared on startup")
+        except Exception as e:
+            logger.warning(f"Failed to clear MongoDB on startup: {e}")
     else:
         logger.warning("Failed to connect to MongoDB on startup")
 
@@ -55,6 +70,24 @@ async def shutdown_event():
     logger.info("Shutting down Pigeon API...")
     rabbitmq_service.disconnect()
     mongodb_service.disconnect()
+
+async def send_delayed_message(to_number: str, from_number: str, original_message: str):
+    """Send a delayed message after 10 seconds with Grok's response"""
+    await asyncio.sleep(45)  # Wait 10 seconds
+    
+    try:
+        # Get Grok's response to the user message
+        grok_response = get_grok_response(original_message)
+        
+        message = client.messages.create(
+            body=grok_response,
+            from_=from_number,  # Use the same Twilio number that received the message
+            to=to_number
+        )
+        print(f"Delayed Grok message sent successfully. SID: {message.sid}")
+        print(f"Grok response: {grok_response}")
+    except Exception as e:
+        print(f"Error sending delayed message: {e}")
 
 @app.post("/message", response_class=Response)
 async def handle_message(
@@ -84,10 +117,48 @@ async def handle_message(
         )
         
         if result["status"] == "success":
-            # queue is empty, so processing the message. 
+            # Queue is empty, so message was processed with GPT
             logger.info(f"Message processed successfully: {MessageSid}")
-            response_message = "Message processed and analyzed"
-        elif result["status"] == "success":
+            
+            # Get GPT response and check for delay
+            try:
+                gpt_response = result.get("gpt_response", {"delay": "0"})
+                delay_value = gpt_response.get("delay", "0") if isinstance(gpt_response, dict) else "0"
+                
+                # Check if delay is greater than 0
+                if delay_value != "0" and delay_value.strip():
+                    logger.info(f"Delay detected: {delay_value}. Adding to queue and scheduling delayed response.")
+                    
+                    # Add message to queue
+                    try:
+                        rabbitmq_service.publish_message(SMS_QUEUE_NAME, {
+                            "from": From,
+                            "to": To,
+                            "body": Body,
+                            "message_sid": MessageSid,
+                            "account_sid": AccountSid
+                        })
+                        logger.info(f"Message added to queue: {MessageSid}")
+                    except Exception as queue_error:
+                        logger.error(f"Error adding message to queue: {queue_error}")
+                    
+                    # Schedule delayed response (no immediate response)
+                    asyncio.create_task(send_delayed_message(From, To, Body))
+                    
+                    # Return empty TwiML response (no message sent immediately)
+                    return Response(content='<?xml version="1.0" encoding="UTF-8"?><Response></Response>', 
+                                  media_type="application/xml")
+                else:
+                    # No delay, deliver the exact original message back
+                    logger.info("No delay detected. Delivering original message back.")
+                    return Response(content=f'<?xml version="1.0" encoding="UTF-8"?><Response><Message>{Body}</Message></Response>', 
+                                  media_type="application/xml")
+                
+            except Exception as e:
+                logger.error(f"Error processing GPT response: {e}")
+                response_message = "Message processed but failed to handle response"
+            
+        elif result["status"] == "skipped":
             # Queue is not empty, so call Grok and send response directly via Twilio API
             try:
                 grok_response = get_grok_response(Body)

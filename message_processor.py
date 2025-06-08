@@ -3,6 +3,7 @@ import json
 from typing import Dict, Any
 from rabbitmq_service import rabbitmq_service
 from mongodb_service import mongodb_service
+from gpt_agent import ChatAgent
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +81,11 @@ def process_message_if_queue_empty(from_number: str, to_number: str, body: str,
         total_messages = mongodb_service.get_message_count()
         
         # Step 5: Send to GPT
-        gpt_response = send_gpt(messages_json) ### TODO: Ganesh function to be called here
+        agent = ChatAgent()
+        gpt_response = agent.analyze_time_sensitive_conversation(messages_json)
+        print(gpt_response)
+        
+
         
         # Prepare final response
         result = {
