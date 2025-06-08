@@ -8,30 +8,7 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-def get_grok_response(message_body: str) -> str:
-    """
-    Get response from Grok AI for the given message.
-    This is a placeholder function - replace with actual Grok API integration.
-    
-    Args:
-        message_body: The SMS message content to process
-        
-    Returns:
-        String response from Grok AI
-    """
-    try:
-        # TODO: Replace this with actual Grok API call
-        # For now, return a simple response
-        response = f"Thanks for your message: '{message_body}'. This is a Grok AI response placeholder."
-        
-        logger.info(f"Grok response generated for message: {message_body[:50]}...")
-        return response
-        
-    except Exception as e:
-        logger.error(f"Error getting Grok response: {e}")
-        return "Sorry, I'm having trouble processing your message right now. Please try again later."
-
-def get_grok_response_old(user_message: str) -> str:
+def get_grok_response(user_message: str) -> str:
     """
     Get response from X's Grok model
     
@@ -79,3 +56,4 @@ def get_grok_response_old(user_message: str) -> str:
     except Exception as e:
         print(f"Error calling Grok API: {e}")
         return "Sorry, I'm having trouble processing your message right now. Please try again later." 
+    

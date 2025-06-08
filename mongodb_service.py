@@ -50,7 +50,7 @@ class MongoDBService:
         Returns True if successful, False otherwise.
         """
         try:
-            if not self.collection:
+            if self.collection is None:
                 if not self.connect():
                     return False
             
@@ -88,7 +88,7 @@ class MongoDBService:
         Returns list of messages or empty list if error.
         """
         try:
-            if not self.collection:
+            if self.collection is None:
                 if not self.connect():
                     return []
             
@@ -130,7 +130,7 @@ class MongoDBService:
         Returns True if successful, False otherwise.
         """
         try:
-            if not self.collection:
+            if self.collection is None:
                 if not self.connect():
                     return False
             
@@ -151,7 +151,7 @@ class MongoDBService:
         Returns count or 0 if error.
         """
         try:
-            if not self.collection:
+            if self.collection is None:
                 if not self.connect():
                     return 0
             

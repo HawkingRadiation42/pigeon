@@ -87,7 +87,7 @@ async def handle_message(
             # queue is empty, so processing the message. 
             logger.info(f"Message processed successfully: {MessageSid}")
             response_message = "Message processed and analyzed"
-        elif result["status"] == "skipped":
+        elif result["status"] == "success":
             # Queue is not empty, so call Grok and send response directly via Twilio API
             try:
                 grok_response = get_grok_response(Body)
