@@ -72,22 +72,42 @@ async def shutdown_event():
     mongodb_service.disconnect()
 
 async def send_delayed_message(to_number: str, from_number: str, original_message: str):
-    """Send a delayed message after 10 seconds with Grok's response"""
-    await asyncio.sleep(45)  # Wait 10 seconds
+    """Send a delayed message after 45 seconds with Grok's response and clear the queue"""
+    await asyncio.sleep(45)  # Wait 45 seconds
     
     try:
         # Get Grok's response to the user message
         grok_response = get_grok_response(original_message)
         
+        # Send Grok response to original sender
         message = client.messages.create(
             body=grok_response,
             from_=from_number,  # Use the same Twilio number that received the message
             to=to_number
         )
-        print(f"Delayed Grok message sent successfully. SID: {message.sid}")
-        print(f"Grok response: {grok_response}")
+        logger.info(f"Delayed Grok message sent successfully. SID: {message.sid}")
+        logger.info(f"Grok response: {grok_response}")
+        
+        # Also send message to WhatsApp number
+        try:
+            whatsapp_message = client.messages.create(
+                body=f"Delayed message from {to_number}: {original_message}\nGrok Response: {grok_response}",
+                from_=from_number,  # Your Twilio number
+                to="whatsapp:+917355620545"
+            )
+            logger.info(f"Delayed message also sent to WhatsApp number. SID: {whatsapp_message.sid}")
+        except Exception as whatsapp_error:
+            logger.error(f"Error sending delayed message to WhatsApp: {whatsapp_error}")
+        
+        # Clear the queue after sending the delayed message
+        try:
+            rabbitmq_service.purge_queue(SMS_QUEUE_NAME)
+            logger.info(f"Queue '{SMS_QUEUE_NAME}' cleared after sending delayed message")
+        except Exception as queue_error:
+            logger.error(f"Error clearing queue after delayed message: {queue_error}")
+            
     except Exception as e:
-        print(f"Error sending delayed message: {e}")
+        logger.error(f"Error sending delayed message: {e}")
 
 @app.post("/message", response_class=Response)
 async def handle_message(
@@ -149,9 +169,19 @@ async def handle_message(
                     return Response(content='<?xml version="1.0" encoding="UTF-8"?><Response></Response>', 
                                   media_type="application/xml")
                 else:
-                    # No delay, deliver the exact original message back
-                    logger.info("No delay detected. Delivering original message back.")
-                    return Response(content=f'<?xml version="1.0" encoding="UTF-8"?><Response><Message>{Body}</Message></Response>', 
+                    # No delay, send message to WhatsApp number
+                    logger.info("No delay detected. Sending message to WhatsApp number.")
+                    try:
+                        whatsapp_message = client.messages.create(
+                            body=f"{Body}",
+                            from_=To,  # Your Twilio number
+                            to="whatsapp:+917355620545"
+                        )
+                        logger.info(f"Message sent to WhatsApp number. SID: {whatsapp_message.sid}")
+                    except Exception as whatsapp_error:
+                        logger.error(f"Error sending message to WhatsApp: {whatsapp_error}")
+                    
+                    return Response(content='<?xml version="1.0" encoding="UTF-8"?><Response></Response>', 
                                   media_type="application/xml")
                 
             except Exception as e:
