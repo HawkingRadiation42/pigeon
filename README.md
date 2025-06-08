@@ -1,10 +1,10 @@
 # Pigeon FastAPI Project
 
-A simple FastAPI project with Twilio SMS webhook support.
+A simple FastAPI project with Twilio SMS webhook support and X AI Grok integration.
 
 ## Features
 
-- **POST /message**: Twilio SMS webhook handler - receives SMS messages and returns "hello world" (TwiML)
+- **POST /message**: Twilio SMS webhook handler - receives SMS messages and returns AI-powered responses from X's Grok model
 - **GET /health**: Health check endpoint
 
 ## Setup Instructions
@@ -39,6 +39,24 @@ pip install uv
    ```bash
    uv pip install fastapi uvicorn[standard] pydantic python-multipart
    ```
+
+### Environment Setup
+
+3. **Configure environment variables**:
+   ```bash
+   cp .env.example .env
+   ```
+   
+   Edit `.env` with your credentials:
+   ```
+   TWILIO_ACCOUNT_SID=your_twilio_account_sid
+   TWILIO_AUTH_TOKEN=your_twilio_auth_token  
+   XAI_API_KEY=your_xai_api_key
+   ```
+
+   Get credentials from:
+   - **Twilio**: [Twilio Console](https://console.twilio.com/)
+   - **X AI**: [X AI Console](https://console.x.ai/)
 
 ### Running the Server
 
